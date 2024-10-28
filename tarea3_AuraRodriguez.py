@@ -51,19 +51,19 @@ producer = KafkaProducer(bootstrap_servers=['localhost:9092'],
 # Enviar datos al tópico de Kafka
 for index, row in df.iterrows():
     data = row.to_dict()
-    producer.send('domestic_violence_data', value=data)
+    producer.send('sensor_data', value=data)  # Aquí usamos 'sensor_data' como el tópico de Kafka
     print(f"Sent: {data}")
     time.sleep(1)  # Simular la llegada de datos en tiempo real
 
-    #Spark_streaming_consumer.py
+#Spark_streaming_consumer.py
 
-    from pyspark.sql import SparkSession
-from pyspark.sql.functions import col, window
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, window, from_json
 from pyspark.sql.types import StructType, StructField, StringType, IntegerType, TimestampType
 
 # Configura el nivel de log a WARN para reducir los mensajes INFO
 spark = SparkSession.builder \
-    .appName("BatchProcessing") \
+    .appName("KafkaSparkStreaming") \
     .getOrCreate()
 spark.sparkContext.setLogLevel("WARN")
 
@@ -82,24 +82,29 @@ schema = StructType([
     StructField("Fecha Hecho", TimestampType())
 ])
 
-# Leer el archivo desde HDFS
-file_path = 'hdfs://localhost:9000/Tarea3/Reporte_Delito_Violencia_Intrafamiliar_Polic_a_Nacional.csv'
+# Configurar el lector de streaming para leer desde Kafka
+kafka_df = spark.readStream \
+    .format("kafka") \
+    .option("kafka.bootstrap.servers", "localhost:9092") \
+    .option("subscribe", "sensor_data") \
+    .load()
 
-# Cargar el archivo CSV en un DataFrame
-df = spark.read.format('csv') \
-    .option('header', 'true') \
-    .option('inferSchema', 'true') \
-    .schema(schema) \
-    .load(file_path)
+# Parsear los datos JSON de Kafka
+parsed_df = kafka_df.select(from_json(col("value").cast("string"), schema).alias("data")).select("data.*")
 
 # Calcular estadísticas por ventana de tiempo
-windowed_stats = df \
+windowed_stats = parsed_df \
     .groupBy(window(col("Fecha Hecho"), "1 minute"), "Departamento") \
-    .agg({"Edad": "avg"}) \
-    .persist()  # Asegura que el DataFrame se persista en memoria y disco
+    .agg({"Edad": "avg"})
 
-# Escribir los resultados a la consola
-windowed_stats.show()
+# Escribir los resultados en la consola
+query = windowed_stats \
+    .writeStream \
+    .outputMode("complete") \
+    .format("console") \
+    .start()
+
+query.awaitTermination()
 
 #Link de la información:
 # https://www.kaggle.com/datasets/oscardavidperilla/domestic-violence-in-colombia/data
