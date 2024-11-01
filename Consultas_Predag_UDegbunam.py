@@ -9,7 +9,7 @@ spark = SparkSession.builder.appName('Tarea3').getOrCreate()
 spark.conf.set("spark.sql.debug.maxToStringFields", 100)
 
 # Define la ruta del archivo .csv en HDFS
-file_path = 'hdfs://localhost:9000/Tarea3/h2yr-zfb2.csv'
+file_path = 'hdfs://localhost:9000/Tarea3/h3yr-zab2.csv'
 print(f"Leyendo el archivo CSV desde HDFS ubicado en la ruta: {file_path}.")
 
 # Lee el archivo .csv
